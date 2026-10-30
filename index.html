@@ -661,6 +661,9 @@ draw();
 const pn=document.querySelector('[data-home-nav=progress]');
 if(pn)pn.addEventListener('click',()=>{roll();const s=(i,v)=>{const e=$(i);if(e)e.textContent=v};s('homeModalKicker','Tiến độ của bạn');s('homeModalTitle',S.streak+' ngày học liên tiếp');s('homeModalText','Hôm nay bạn đã làm '+S.n+'/'+G+' câu. Tổng cộng '+S.total+' câu. Học đều mỗi ngày để giữ chuỗi nhé!')});
 })();
+<!-- THƯ VIỆN ĐỌC FILE .DOCX TRỰC TIẾP TRÊN TRÌNH DUYỆT -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
 <!-- MODULE TỰ ĐỘNG NHẬN DIỆN ĐỀ TRIẾT, BỐC 50 CÂU & TÍNH 0.2 ĐIỂM/CÂU -->
 <script>
 (function() {
@@ -862,7 +865,6 @@ if(pn)pn.addEventListener('click',()=>{roll();const s=(i,v)=>{const e=$(i);if(e)
 
   function convertScoreText(str) {
     let s = str;
-    // Trường hợp 1: Có ghi số câu đúng kèm điểm, VD: "Đúng 10/50 câu · 2.5/10 điểm"
     const matchCount = s.match(/(\d+)\s*\/\s*50/);
     if (matchCount) {
       const correct = parseInt(matchCount[1], 10);
@@ -873,12 +875,10 @@ if(pn)pn.addEventListener('click',()=>{roll();const s=(i,v)=>{const e=$(i);if(e)
       return s;
     }
 
-    // Trường hợp 2: Chỉ hiển thị điểm số (VD: "⭐ 0.25/10" hoặc "+0.25 điểm" hoặc "2.5 điểm")
     s = s.replace(/(\d+(?:[.,]\d+)?)(?=\s*\/\s*10\b|\s*điểm\b|\s*đ\b)/gi, (match) => {
       const useComma = match.includes(",");
       const val = parseFloat(match.replace(",", "."));
       if (isNaN(val)) return match;
-      // Nếu là bội số của 0.25 (do web gốc tính 10/40 = 0.25), quy đổi về số câu đúng * 0.2
       const estCorrect = Math.round(val / 0.25);
       if (Math.abs(estCorrect * 0.25 - val) < 0.011 && estCorrect <= 50) {
         const res = formatScore02(estCorrect);
@@ -896,7 +896,6 @@ if(pn)pn.addEventListener('click',()=>{roll();const s=(i,v)=>{const e=$(i);if(e)
       if (!isPhilosophyActive || isUpdatingDOM) return;
       isUpdatingDOM = true;
 
-      // Quét các phần tử hiển thị điểm trên thanh trạng thái, thông báo câu và bảng tổng kết
       const targets = quizContainer.querySelectorAll(".score, .feedback, .result-strip, .finish-score, .finish p, .progress-copy");
       targets.forEach(el => {
         const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null, false);
@@ -933,7 +932,6 @@ if(pn)pn.addEventListener('click',()=>{roll();const s=(i,v)=>{const e=$(i);if(e)
   const backBtn = document.getElementById("backToSelection");
   if (backBtn) backBtn.addEventListener("click", restoreOriginalSubject, true);
 
-  // Khi bấm nút "Làm lại đề mới" ở cuối bài thi Triết học, tự động bốc 50 câu mới
   document.addEventListener("click", function(e) {
     if (!isPhilosophyActive) return;
     const btn = e.target.closest(".result-strip button, .finish button");
@@ -973,14 +971,12 @@ if(pn)pn.addEventListener('click',()=>{roll();const s=(i,v)=>{const e=$(i);if(e)
       const bankSelect = document.getElementById("bank");
       const scopeSelect = document.getElementById("scope");
       const practiceBtn = document.getElementById("practiceMode");
-      const examBtn = document.getElementById("examMode");
       const beginBtn = document.getElementById("beginQuiz");
 
       if (bankSelect) {
         bankSelect.value = "new";
         bankSelect.dispatchEvent(new Event("change", { bubbles: true }));
       }
-      // Nếu web dùng practiceMode để lấy toàn bộ 50 câu trong mảng NEW_LESSONS
       if (practiceBtn) practiceBtn.click();
       if (scopeSelect) {
         scopeSelect.value = "all";
