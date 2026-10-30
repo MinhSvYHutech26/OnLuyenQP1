@@ -662,5 +662,283 @@ const pn=document.querySelector('[data-home-nav=progress]');
 if(pn)pn.addEventListener('click',()=>{roll();const s=(i,v)=>{const e=$(i);if(e)e.textContent=v};s('homeModalKicker','Tiến độ của bạn');s('homeModalTitle',S.streak+' ngày học liên tiếp');s('homeModalText','Hôm nay bạn đã làm '+S.n+'/'+G+' câu. Tổng cộng '+S.total+' câu. Học đều mỗi ngày để giữ chuỗi nhé!')});
 })();
 </script>
+<!-- THƯ VIỆN ĐỌC FILE .DOCX TRỰC TIẾP TRÊN TRÌNH DUYỆT -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+<!-- MODULE TỰ ĐỘNG NHẬN DIỆN ĐỀ TRIẾT & BỐC 50 CÂU PHÂN BỔ ĐỀU 3 BÀI -->
+<script>
+(function() {
+  const DOCX_FILENAME = "Ngan_hang_trac_nghiem_Triet_hoc_451_cau.docx";
+  let philPool = { 1: [], 2: [], 3: [] };
+  let isPhilLoaded = false;
+  let isPhilLoading = false;
+
+  // 1. Chuyển giao diện thẻ Triết học sang trạng thái "Sẵn sàng"
+  const philTile = document.querySelector('[data-home-action="philosophy"]');
+  if (philTile) {
+    const badge = philTile.querySelector('.subject-badge');
+    if (badge) {
+      badge.textContent = "Sẵn sàng";
+      badge.classList.remove('badge-soon');
+      badge.classList.add('badge-ready');
+    }
+    const desc = philTile.querySelector('p');
+    if (desc) desc.textContent = "Thi thử 50 câu · Phân bổ đều 3 bài";
+  }
+
+  // 2. Hàm phân loại câu hỏi về đúng 3 Chương/Bài dựa trên mã thẻ [tag] và từ khóa
+  function detectLessonGroup(tag, questionText) {
+    const t = (tag || "").toUpperCase();
+    // Chương 1: Khái luận về Triết học và Triết học Mác - Lênin
+    if (t.includes("S03") || t.includes("P1-") || t.includes("KTRA1") || t.includes("VIDEO")) return 1;
+    // Chương 2: Chủ nghĩa duy vật biện chứng
+    if (t.includes("S02") || t.includes("P2-") || t.includes("BO2")) return 2;
+    // Chương 3: Chủ nghĩa duy vật lịch sử
+    if (t.includes("S01") || t.includes("P3-")) return 3;
+
+    // Dự phòng bằng từ khóa nếu câu không khớp tag
+    const q = questionText.toLowerCase();
+    if (/lực lượng sản xuất|quan hệ sản xuất|cơ sở hạ tầng|kiến trúc thượng tầng|giai cấp|nhà nước|hình thái kinh tế|quần chúng nhân dân/.test(q)) return 3;
+    if (/thế giới quan|vấn đề cơ bản của triết học|bất khả tri|khả tri|cổ điển đức|phoi-ơ-bắc|hêghen/.test(q)) return 1;
+    return 2;
+  }
+
+  // 3. Hàm đọc và bóc tách 451 câu hỏi từ file .docx
+  async function loadPhilosophyDocx() {
+    if (isPhilLoaded) return true;
+    if (isPhilLoading) return false;
+    isPhilLoading = true;
+
+    try {
+      const response = await fetch(DOCX_FILENAME);
+      if (!response.ok) throw new Error("Không tìm thấy file " + DOCX_FILENAME + " trên GitHub!");
+      const arrayBuffer = await response.arrayBuffer();
+      const zip = await JSZip.loadAsync(arrayBuffer);
+      const xmlText = await zip.file("word/document.xml").async("string");
+
+      const parser = new DOMParser();
+      const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+      const paragraphs = xmlDoc.getElementsByTagName("w:p");
+
+      const lines = [];
+      for (let i = 0; i < paragraphs.length; i++) {
+        const texts = paragraphs[i].getElementsByTagName("w:t");
+        let line = "";
+        for (let j = 0; j < texts.length; j++) {
+          line += texts[j].textContent;
+        }
+        line = line.trim();
+        if (line) lines.push(line);
+      }
+
+      // Bước 3.1: Đọc "Phần 2. Bảng đáp án nhanh" ở cuối file để đối chiếu chính xác 100%
+      const answerKeyMap = {};
+      let inAnswerTable = false;
+      for (const line of lines) {
+        if (line.includes("Phần 2. Bảng đáp án nhanh")) inAnswerTable = true;
+        if (inAnswerTable) {
+          const matches = [...line.matchAll(/(\d+)\s+([A-D])/g)];
+          for (const m of matches) {
+            answerKeyMap[parseInt(m[1], 10)] = m[2];
+          }
+        }
+      }
+
+      // Bước 3.2: Bóc tách từng câu hỏi, các phương án A B C D và dấu ✓
+      philPool = { 1: [], 2: [], 3: [] };
+      let currentQ = null;
+
+      for (const line of lines) {
+        if (line.includes("Phần 2. Bảng đáp án nhanh")) break;
+
+        // Nhận diện dòng bắt đầu câu hỏi: "Câu 1. ..." hoặc "Câu 396. ★ ..."
+        const qMatch = line.match(/^Câu\s+(\d+)\.\s*(?:★\s*)?(.*)$/i);
+        if (qMatch) {
+          if (currentQ && currentQ.options.length >= 2) {
+            finalizeQuestion(currentQ, answerKeyMap);
+          }
+          const qNum = parseInt(qMatch[1], 10);
+          let rawBody = qMatch[2].trim();
+          let tag = "";
+
+          // Tách mã nguồn ở cuối câu (VD: [DOCX·S01-Q001])
+          const tagMatch = rawBody.match(/\[([^\]]+)\]\s*$/);
+          if (tagMatch) {
+            tag = tagMatch[1];
+            rawBody = rawBody.slice(0, tagMatch.index).trim();
+          }
+
+          currentQ = {
+            num: qNum,
+            text: rawBody,
+            tag: tag,
+            options: [],
+            answerIndex: -1
+          };
+          continue;
+        }
+
+        // Nhận diện dòng phương án A., B., C., D.
+        if (currentQ) {
+          const optMatch = line.match(/^([A-D])\.\s*(.*)$/);
+          if (optMatch) {
+            const label = optMatch[1].toUpperCase();
+            let optBody = optMatch[2].trim();
+            let isCorrect = false;
+
+            // Kiểm tra dấu ✓ ở cuối phương án
+            if (optBody.includes("✓")) {
+              isCorrect = true;
+              optBody = optBody.replace(/✓/g, "").trim();
+            }
+
+            const idx = currentQ.options.length;
+            if (isCorrect) currentQ.answerIndex = idx;
+
+            currentQ.options.push({
+              label: label,
+              text: label + ". " + optBody,
+              correctMarked: isCorrect
+            });
+          } else if (currentQ.options.length === 0) {
+            // Nối tiếp văn bản câu hỏi nếu bị xuống dòng
+            let extra = line;
+            const tagMatch = extra.match(/\[([^\]]+)\]\s*$/);
+            if (tagMatch) {
+              currentQ.tag = tagMatch[1];
+              extra = extra.slice(0, tagMatch.index).trim();
+            }
+            if (extra) currentQ.text += " " + extra;
+          }
+        }
+      }
+
+      if (currentQ && currentQ.options.length >= 2) {
+        finalizeQuestion(currentQ, answerKeyMap);
+      }
+
+      isPhilLoaded = true;
+      isPhilLoading = false;
+      return true;
+    } catch (err) {
+      console.error(err);
+      isPhilLoading = false;
+      alert("Không thể đọc file đề Triết học: " + err.message);
+      return false;
+    }
+  }
+
+  function finalizeQuestion(q, answerKeyMap) {
+    // Nếu chưa bắt được dấu ✓ thì tra từ Bảng đáp án nhanh ở Phần 2
+    if (q.answerIndex === -1 && answerKeyMap[q.num]) {
+      const targetLabel = answerKeyMap[q.num];
+      const foundIdx = q.options.findIndex(o => o.label === targetLabel);
+      if (foundIdx !== -1) {
+        q.answerIndex = foundIdx;
+        q.options[foundIdx].correctMarked = true;
+      }
+    }
+    if (q.answerIndex === -1) q.answerIndex = 0;
+
+    const group = detectLessonGroup(q.tag, q.text);
+    philPool[group].push({
+      id: "triet-" + q.num,
+      text: q.text,
+      options: q.options,
+      answerIndex: q.answerIndex,
+      sourceKeyMarked: true,
+      lessonGroup: group
+    });
+  }
+
+  // 4. Thuật toán xáo trộn Fisher-Yates & Rút 50 câu chia đều 3 bài (17 - 17 - 16)
+  function shuffleArray(arr) {
+    const copy = arr.slice();
+    for (let i = copy.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    return copy;
+  }
+
+  function drawBalanced50Questions() {
+    // Xáo trộn ngẫu nhiên thứ tự phân bổ [17, 17, 16] giữa 3 bài để công bằng tuyệt đối
+    const quotas = shuffleArray([17, 17, 16]);
+    const g1 = shuffleArray(philPool[1]).slice(0, quotas[0]);
+    const g2 = shuffleArray(philPool[2]).slice(0, quotas[1]);
+    const g3 = shuffleArray(philPool[3]).slice(0, quotas[2]);
+
+    // Trộn đều toàn bộ 50 câu đã rút để đề thi ngẫu nhiên hoàn toàn
+    return shuffleArray([...g1, ...g2, ...g3]);
+  }
+
+  // 5. Tích hợp thẳng vào luồng làm bài (Study Screen) hiện tại của Web
+  let originalNewLessons = null;
+
+  function restoreOriginalSubject() {
+    if (originalNewLessons && typeof NEW_LESSONS !== "undefined") {
+      NEW_LESSONS.length = 0;
+      originalNewLessons.forEach(item => NEW_LESSONS.push(item));
+      originalNewLessons = null;
+    }
+  }
+
+  // Khi bấm vào nút "Quốc phòng & An ninh" hoặc nút "Trang chủ", trả lại kho đề Quốc phòng như cũ
+  const qpTile = document.querySelector('[data-home-action="qp"]');
+  if (qpTile) qpTile.addEventListener("click", restoreOriginalSubject, true);
+
+  const backBtn = document.getElementById("backToSelection");
+  if (backBtn) backBtn.addEventListener("click", restoreOriginalSubject, true);
+
+  // Bắt sự kiện khi bấm vào thẻ môn "Triết học"
+  if (philTile) {
+    philTile.addEventListener("click", async function(e) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+
+      const badge = philTile.querySelector('.subject-badge');
+      const oldBadgeText = badge ? badge.textContent : "";
+      if (badge) badge.textContent = "Đang tải đề...";
+
+      const ok = await loadPhilosophyDocx();
+      if (badge) badge.textContent = oldBadgeText;
+      if (!ok) return;
+
+      // Sao lưu đề gốc nếu chưa lưu
+      if (!originalNewLessons && typeof NEW_LESSONS !== "undefined") {
+        originalNewLessons = JSON.parse(JSON.stringify(NEW_LESSONS));
+      }
+
+      // Bốc 50 câu Triết học phân bổ đều 3 bài và nạp vào bộ đề chạy
+      const selected50 = drawBalanced50Questions();
+      if (typeof NEW_LESSONS !== "undefined") {
+        NEW_LESSONS.length = 0;
+        NEW_LESSONS.push({
+          id: 1,
+          title: "Triết học Mác - Lênin (50 câu)",
+          questions: selected50
+        });
+      }
+
+      // Kích hoạt chế độ lấy toàn bộ 50 câu vừa rút (dùng cơ chế sẵn có của web)
+      const bankSelect = document.getElementById("bank");
+      const scopeSelect = document.getElementById("scope");
+      const practiceBtn = document.getElementById("practiceMode");
+      const beginBtn = document.getElementById("beginQuiz");
+
+      if (bankSelect) {
+        bankSelect.value = "new";
+        bankSelect.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      if (practiceBtn) practiceBtn.click();
+      if (scopeSelect) {
+        scopeSelect.value = "all";
+        scopeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      if (beginBtn) beginBtn.click();
+    }, true);
+  }
+})();
+</script>
 </body>
 </html>
