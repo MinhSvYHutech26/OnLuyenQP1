@@ -661,17 +661,14 @@ draw();
 const pn=document.querySelector('[data-home-nav=progress]');
 if(pn)pn.addEventListener('click',()=>{roll();const s=(i,v)=>{const e=$(i);if(e)e.textContent=v};s('homeModalKicker','Tiến độ của bạn');s('homeModalTitle',S.streak+' ngày học liên tiếp');s('homeModalText','Hôm nay bạn đã làm '+S.n+'/'+G+' câu. Tổng cộng '+S.total+' câu. Học đều mỗi ngày để giữ chuỗi nhé!')});
 })();
-</script>
-<!-- THƯ VIỆN ĐỌC FILE .DOCX TRỰC TIẾP TRÊN TRÌNH DUYỆT -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-
-<!-- MODULE TỰ ĐỘNG NHẬN DIỆN ĐỀ TRIẾT & BỐC 50 CÂU PHÂN BỔ ĐỀU 3 BÀI -->
+<!-- MODULE TỰ ĐỘNG NHẬN DIỆN ĐỀ TRIẾT, BỐC 50 CÂU & TÍNH 0.2 ĐIỂM/CÂU -->
 <script>
 (function() {
   const DOCX_FILENAME = "Ngan_hang_trac_nghiem_Triet_hoc_451_cau.docx";
   let philPool = { 1: [], 2: [], 3: [] };
   let isPhilLoaded = false;
   let isPhilLoading = false;
+  let isPhilosophyActive = false;
 
   // 1. Chuyển giao diện thẻ Triết học sang trạng thái "Sẵn sàng"
   const philTile = document.querySelector('[data-home-action="philosophy"]');
@@ -683,20 +680,16 @@ if(pn)pn.addEventListener('click',()=>{roll();const s=(i,v)=>{const e=$(i);if(e)
       badge.classList.add('badge-ready');
     }
     const desc = philTile.querySelector('p');
-    if (desc) desc.textContent = "Thi thử 50 câu · Phân bổ đều 3 bài";
+    if (desc) desc.textContent = "Thi thử 50 câu · 0,2đ/câu";
   }
 
-  // 2. Hàm phân loại câu hỏi về đúng 3 Chương/Bài dựa trên mã thẻ [tag] và từ khóa
+  // 2. Hàm phân loại câu hỏi về đúng 3 Chương/Bài
   function detectLessonGroup(tag, questionText) {
     const t = (tag || "").toUpperCase();
-    // Chương 1: Khái luận về Triết học và Triết học Mác - Lênin
     if (t.includes("S03") || t.includes("P1-") || t.includes("KTRA1") || t.includes("VIDEO")) return 1;
-    // Chương 2: Chủ nghĩa duy vật biện chứng
     if (t.includes("S02") || t.includes("P2-") || t.includes("BO2")) return 2;
-    // Chương 3: Chủ nghĩa duy vật lịch sử
     if (t.includes("S01") || t.includes("P3-")) return 3;
 
-    // Dự phòng bằng từ khóa nếu câu không khớp tag
     const q = questionText.toLowerCase();
     if (/lực lượng sản xuất|quan hệ sản xuất|cơ sở hạ tầng|kiến trúc thượng tầng|giai cấp|nhà nước|hình thái kinh tế|quần chúng nhân dân/.test(q)) return 3;
     if (/thế giới quan|vấn đề cơ bản của triết học|bất khả tri|khả tri|cổ điển đức|phoi-ơ-bắc|hêghen/.test(q)) return 1;
@@ -711,7 +704,7 @@ if(pn)pn.addEventListener('click',()=>{roll();const s=(i,v)=>{const e=$(i);if(e)
 
     try {
       const response = await fetch(DOCX_FILENAME);
-      if (!response.ok) throw new Error("Không tìm thấy file " + DOCX_FILENAME + " trên GitHub!");
+      if (!response.ok) throw new Error("Không tìm thấy file " + DOCX_FILENAME);
       const arrayBuffer = await response.arrayBuffer();
       const zip = await JSZip.loadAsync(arrayBuffer);
       const xmlText = await zip.file("word/document.xml").async("string");
@@ -731,7 +724,6 @@ if(pn)pn.addEventListener('click',()=>{roll();const s=(i,v)=>{const e=$(i);if(e)
         if (line) lines.push(line);
       }
 
-      // Bước 3.1: Đọc "Phần 2. Bảng đáp án nhanh" ở cuối file để đối chiếu chính xác 100%
       const answerKeyMap = {};
       let inAnswerTable = false;
       for (const line of lines) {
@@ -744,14 +736,12 @@ if(pn)pn.addEventListener('click',()=>{roll();const s=(i,v)=>{const e=$(i);if(e)
         }
       }
 
-      // Bước 3.2: Bóc tách từng câu hỏi, các phương án A B C D và dấu ✓
       philPool = { 1: [], 2: [], 3: [] };
       let currentQ = null;
 
       for (const line of lines) {
         if (line.includes("Phần 2. Bảng đáp án nhanh")) break;
 
-        // Nhận diện dòng bắt đầu câu hỏi: "Câu 1. ..." hoặc "Câu 396. ★ ..."
         const qMatch = line.match(/^Câu\s+(\d+)\.\s*(?:★\s*)?(.*)$/i);
         if (qMatch) {
           if (currentQ && currentQ.options.length >= 2) {
@@ -761,7 +751,6 @@ if(pn)pn.addEventListener('click',()=>{roll();const s=(i,v)=>{const e=$(i);if(e)
           let rawBody = qMatch[2].trim();
           let tag = "";
 
-          // Tách mã nguồn ở cuối câu (VD: [DOCX·S01-Q001])
           const tagMatch = rawBody.match(/\[([^\]]+)\]\s*$/);
           if (tagMatch) {
             tag = tagMatch[1];
@@ -778,7 +767,6 @@ if(pn)pn.addEventListener('click',()=>{roll();const s=(i,v)=>{const e=$(i);if(e)
           continue;
         }
 
-        // Nhận diện dòng phương án A., B., C., D.
         if (currentQ) {
           const optMatch = line.match(/^([A-D])\.\s*(.*)$/);
           if (optMatch) {
@@ -786,7 +774,6 @@ if(pn)pn.addEventListener('click',()=>{roll();const s=(i,v)=>{const e=$(i);if(e)
             let optBody = optMatch[2].trim();
             let isCorrect = false;
 
-            // Kiểm tra dấu ✓ ở cuối phương án
             if (optBody.includes("✓")) {
               isCorrect = true;
               optBody = optBody.replace(/✓/g, "").trim();
@@ -801,7 +788,6 @@ if(pn)pn.addEventListener('click',()=>{roll();const s=(i,v)=>{const e=$(i);if(e)
               correctMarked: isCorrect
             });
           } else if (currentQ.options.length === 0) {
-            // Nối tiếp văn bản câu hỏi nếu bị xuống dòng
             let extra = line;
             const tagMatch = extra.match(/\[([^\]]+)\]\s*$/);
             if (tagMatch) {
@@ -829,7 +815,6 @@ if(pn)pn.addEventListener('click',()=>{roll();const s=(i,v)=>{const e=$(i);if(e)
   }
 
   function finalizeQuestion(q, answerKeyMap) {
-    // Nếu chưa bắt được dấu ✓ thì tra từ Bảng đáp án nhanh ở Phần 2
     if (q.answerIndex === -1 && answerKeyMap[q.num]) {
       const targetLabel = answerKeyMap[q.num];
       const foundIdx = q.options.findIndex(o => o.label === targetLabel);
@@ -851,7 +836,7 @@ if(pn)pn.addEventListener('click',()=>{roll();const s=(i,v)=>{const e=$(i);if(e)
     });
   }
 
-  // 4. Thuật toán xáo trộn Fisher-Yates & Rút 50 câu chia đều 3 bài (17 - 17 - 16)
+  // 4. Rút 50 câu chia đều 3 bài (17 - 17 - 16)
   function shuffleArray(arr) {
     const copy = arr.slice();
     for (let i = copy.length - 1; i > 0; i--) {
@@ -862,20 +847,79 @@ if(pn)pn.addEventListener('click',()=>{roll();const s=(i,v)=>{const e=$(i);if(e)
   }
 
   function drawBalanced50Questions() {
-    // Xáo trộn ngẫu nhiên thứ tự phân bổ [17, 17, 16] giữa 3 bài để công bằng tuyệt đối
     const quotas = shuffleArray([17, 17, 16]);
     const g1 = shuffleArray(philPool[1]).slice(0, quotas[0]);
     const g2 = shuffleArray(philPool[2]).slice(0, quotas[1]);
     const g3 = shuffleArray(philPool[3]).slice(0, quotas[2]);
-
-    // Trộn đều toàn bộ 50 câu đã rút để đề thi ngẫu nhiên hoàn toàn
     return shuffleArray([...g1, ...g2, ...g3]);
   }
 
-  // 5. Tích hợp thẳng vào luồng làm bài (Study Screen) hiện tại của Web
+  // 5. BỘ QUY ĐỔI ĐIỂM TỰ ĐỘNG: Chuyển mọi điểm 0.25 -> 0.2 (Thang 10 cho 50 câu)
+  function formatScore02(correctCount) {
+    const raw = (correctCount * 0.2).toFixed(1);
+    return raw.endsWith(".0") ? raw.slice(0, -2) : raw;
+  }
+
+  function convertScoreText(str) {
+    let s = str;
+    // Trường hợp 1: Có ghi số câu đúng kèm điểm, VD: "Đúng 10/50 câu · 2.5/10 điểm"
+    const matchCount = s.match(/(\d+)\s*\/\s*50/);
+    if (matchCount) {
+      const correct = parseInt(matchCount[1], 10);
+      const newScore = formatScore02(correct);
+      s = s.replace(/(\d+(?:[.,]\d+)?)\s*(?=\/\s*10\b|\s*điểm\b|\s*đ\b)/gi, (m) => {
+        return m.includes(",") ? newScore.replace(".", ",") : newScore;
+      });
+      return s;
+    }
+
+    // Trường hợp 2: Chỉ hiển thị điểm số (VD: "⭐ 0.25/10" hoặc "+0.25 điểm" hoặc "2.5 điểm")
+    s = s.replace(/(\d+(?:[.,]\d+)?)(?=\s*\/\s*10\b|\s*điểm\b|\s*đ\b)/gi, (match) => {
+      const useComma = match.includes(",");
+      const val = parseFloat(match.replace(",", "."));
+      if (isNaN(val)) return match;
+      // Nếu là bội số của 0.25 (do web gốc tính 10/40 = 0.25), quy đổi về số câu đúng * 0.2
+      const estCorrect = Math.round(val / 0.25);
+      if (Math.abs(estCorrect * 0.25 - val) < 0.011 && estCorrect <= 50) {
+        const res = formatScore02(estCorrect);
+        return useComma ? res.replace(".", ",") : res;
+      }
+      return match;
+    });
+    return s;
+  }
+
+  const quizContainer = document.getElementById("quiz");
+  if (quizContainer) {
+    let isUpdatingDOM = false;
+    const scoreObserver = new MutationObserver(() => {
+      if (!isPhilosophyActive || isUpdatingDOM) return;
+      isUpdatingDOM = true;
+
+      // Quét các phần tử hiển thị điểm trên thanh trạng thái, thông báo câu và bảng tổng kết
+      const targets = quizContainer.querySelectorAll(".score, .feedback, .result-strip, .finish-score, .finish p, .progress-copy");
+      targets.forEach(el => {
+        const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null, false);
+        let node;
+        while ((node = walker.nextNode())) {
+          const oldVal = node.nodeValue;
+          if (oldVal && (/\d/.test(oldVal))) {
+            const newVal = convertScoreText(oldVal);
+            if (newVal !== oldVal) node.nodeValue = newVal;
+          }
+        }
+      });
+
+      isUpdatingDOM = false;
+    });
+    scoreObserver.observe(quizContainer, { childList: true, subtree: true, characterData: true });
+  }
+
+  // 6. Quản lý chuyển đổi giữa môn Quốc phòng và môn Triết học
   let originalNewLessons = null;
 
   function restoreOriginalSubject() {
+    isPhilosophyActive = false;
     if (originalNewLessons && typeof NEW_LESSONS !== "undefined") {
       NEW_LESSONS.length = 0;
       originalNewLessons.forEach(item => NEW_LESSONS.push(item));
@@ -883,14 +927,21 @@ if(pn)pn.addEventListener('click',()=>{roll();const s=(i,v)=>{const e=$(i);if(e)
     }
   }
 
-  // Khi bấm vào nút "Quốc phòng & An ninh" hoặc nút "Trang chủ", trả lại kho đề Quốc phòng như cũ
   const qpTile = document.querySelector('[data-home-action="qp"]');
   if (qpTile) qpTile.addEventListener("click", restoreOriginalSubject, true);
 
   const backBtn = document.getElementById("backToSelection");
   if (backBtn) backBtn.addEventListener("click", restoreOriginalSubject, true);
 
-  // Bắt sự kiện khi bấm vào thẻ môn "Triết học"
+  // Khi bấm nút "Làm lại đề mới" ở cuối bài thi Triết học, tự động bốc 50 câu mới
+  document.addEventListener("click", function(e) {
+    if (!isPhilosophyActive) return;
+    const btn = e.target.closest(".result-strip button, .finish button");
+    if (btn && typeof NEW_LESSONS !== "undefined" && NEW_LESSONS.length > 0) {
+      NEW_LESSONS[0].questions = drawBalanced50Questions();
+    }
+  }, true);
+
   if (philTile) {
     philTile.addEventListener("click", async function(e) {
       e.preventDefault();
@@ -904,12 +955,11 @@ if(pn)pn.addEventListener('click',()=>{roll();const s=(i,v)=>{const e=$(i);if(e)
       if (badge) badge.textContent = oldBadgeText;
       if (!ok) return;
 
-      // Sao lưu đề gốc nếu chưa lưu
       if (!originalNewLessons && typeof NEW_LESSONS !== "undefined") {
         originalNewLessons = JSON.parse(JSON.stringify(NEW_LESSONS));
       }
 
-      // Bốc 50 câu Triết học phân bổ đều 3 bài và nạp vào bộ đề chạy
+      isPhilosophyActive = true;
       const selected50 = drawBalanced50Questions();
       if (typeof NEW_LESSONS !== "undefined") {
         NEW_LESSONS.length = 0;
@@ -920,16 +970,17 @@ if(pn)pn.addEventListener('click',()=>{roll();const s=(i,v)=>{const e=$(i);if(e)
         });
       }
 
-      // Kích hoạt chế độ lấy toàn bộ 50 câu vừa rút (dùng cơ chế sẵn có của web)
       const bankSelect = document.getElementById("bank");
       const scopeSelect = document.getElementById("scope");
       const practiceBtn = document.getElementById("practiceMode");
+      const examBtn = document.getElementById("examMode");
       const beginBtn = document.getElementById("beginQuiz");
 
       if (bankSelect) {
         bankSelect.value = "new";
         bankSelect.dispatchEvent(new Event("change", { bubbles: true }));
       }
+      // Nếu web dùng practiceMode để lấy toàn bộ 50 câu trong mảng NEW_LESSONS
       if (practiceBtn) practiceBtn.click();
       if (scopeSelect) {
         scopeSelect.value = "all";
