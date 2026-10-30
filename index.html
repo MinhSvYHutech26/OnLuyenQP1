@@ -661,10 +661,7 @@ draw();
 const pn=document.querySelector('[data-home-nav=progress]');
 if(pn)pn.addEventListener('click',()=>{roll();const s=(i,v)=>{const e=$(i);if(e)e.textContent=v};s('homeModalKicker','Tiến độ của bạn');s('homeModalTitle',S.streak+' ngày học liên tiếp');s('homeModalText','Hôm nay bạn đã làm '+S.n+'/'+G+' câu. Tổng cộng '+S.total+' câu. Học đều mỗi ngày để giữ chuỗi nhé!')});
 })();
-<!-- THƯ VIỆN ĐỌC FILE .DOCX TRỰC TIẾP TRÊN TRÌNH DUYỆT -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-
-<!-- MODULE TỰ ĐỘNG NHẬN DIỆN ĐỀ TRIẾT, BỐC 50 CÂU & TÍNH 0.2 ĐIỂM/CÂU -->
+<!-- MODULE TỰ ĐỘNG NẠP THƯ VIỆN, NHẬN DIỆN ĐỀ TRIẾT, BỐC 50 CÂU & TÍNH 0.2 ĐIỂM/CÂU -->
 <script>
 (function() {
   const DOCX_FILENAME = "Ngan_hang_trac_nghiem_Triet_hoc_451_cau.docx";
@@ -672,6 +669,13 @@ if(pn)pn.addEventListener('click',()=>{roll();const s=(i,v)=>{const e=$(i);if(e)
   let isPhilLoaded = false;
   let isPhilLoading = false;
   let isPhilosophyActive = false;
+
+  // Đảm bảo luôn nạp thư viện JSZip nếu trang chưa có
+  if (typeof JSZip === 'undefined') {
+    const script = document.createElement('script');
+    script.src = "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js";
+    document.head.appendChild(script);
+  }
 
   // 1. Chuyển giao diện thẻ Triết học sang trạng thái "Sẵn sàng"
   const philTile = document.querySelector('[data-home-action="philosophy"]');
@@ -706,8 +710,18 @@ if(pn)pn.addEventListener('click',()=>{roll();const s=(i,v)=>{const e=$(i);if(e)
     isPhilLoading = true;
 
     try {
+      if (typeof JSZip === 'undefined') {
+        await new Promise((resolve, reject) => {
+          let check = 0;
+          let interval = setInterval(() => {
+            if (typeof JSZip !== 'undefined') { clearInterval(interval); resolve(); }
+            if (check++ > 30) { clearInterval(interval); reject(new Error("Không tải được thư viện JSZip, vui lòng kiểm tra mạng!")); }
+          }, 100);
+        });
+      }
+
       const response = await fetch(DOCX_FILENAME);
-      if (!response.ok) throw new Error("Không tìm thấy file " + DOCX_FILENAME);
+      if (!response.ok) throw new Error("Không tìm thấy file " + DOCX_FILENAME + " trên GitHub!");
       const arrayBuffer = await response.arrayBuffer();
       const zip = await JSZip.loadAsync(arrayBuffer);
       const xmlText = await zip.file("word/document.xml").async("string");
